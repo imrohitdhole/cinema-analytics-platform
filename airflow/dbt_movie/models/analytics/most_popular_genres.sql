@@ -20,4 +20,4 @@ SELECT
     AVG(popularity) AS avg_popularity
 FROM genre_data
 GROUP BY genre_name
-ORDER BY avg_popularity DESC
+ORDER BY avg_popularity DESC NULLS LAST  -- Snowflake sorts NULLs first in DESC by default

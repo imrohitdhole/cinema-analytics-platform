@@ -9,5 +9,6 @@ SELECT
     release_date,
     popularity
 FROM movies_data
+WHERE popularity IS NOT NULL  -- unknown popularity is NULL and can't be ranked
 ORDER BY popularity DESC
 LIMIT 10

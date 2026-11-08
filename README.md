@@ -22,10 +22,12 @@ Everything runs locally in Docker: Airflow 2.9 (LocalExecutor) with a PostgreSQL
 | DAG | File | Schedule | What it does |
 |---|---|---|---|
 | `etl_imdb_current_year` | `airflow/dags/imdb_historical.py` | Manual | Downloads the IMDb `title.basics` dataset, keeps movies released in the current year, drops incomplete rows, deduplicates on `tconst` and MERGEs into `raw_data.imdb_data_movies`. |
-| `etl_tmdb_movies` | `airflow/dags/tmdb_realtime.py` | Sundays 00:00 | Pages through the TMDb Discover API for US releases from the last 7 days, maps genre IDs to names and MERGEs into `raw_data.tmdb_data_movies`. Records the last processed release date in an Airflow Variable. |
+| `etl_tmdb_movies` | `airflow/dags/tmdb_realtime.py` | Sundays 00:00 | Pages through the TMDb Discover API for US releases from the last 7 days, maps genre IDs to names, cleans the popularity and vote metrics, and MERGEs into `raw_data.tmdb_data_movies` with bound parameters. Records the last processed release date in an Airflow Variable. |
 | `dbt_elt_process` | `airflow/dags/dbt_elt_process.py` | Sundays 00:30 | Runs `dbt run`, then `dbt test`, then `dbt snapshot`, passing Snowflake credentials from the Airflow connection as environment variables. |
 
 Both ingestion DAGs use `MERGE` statements, so re-running them updates existing rows instead of duplicating them.
+
+**Missing TMDb metrics.** Zero is a real value for popularity, vote average and vote count (a new release may have no votes yet), so zeros are kept. Missing, non-numeric, NaN or negative values are stored as `NULL`. The analytics models exclude or sort past `NULL` popularity so unknown values never rank at the top. The cleaning logic lives in `airflow/dags/tmdb_transform.py`, separate from Airflow so it can be unit tested.
 
 ## dbt models
 
@@ -53,11 +55,14 @@ Both ingestion DAGs use `MERGE` statements, so re-running them updates existing 
 cinema-analytics-platform/
 ├── airflow/
 │   ├── docker-compose-min.yaml   # Airflow + PostgreSQL stack
-│   ├── dags/                     # IMDb, TMDb and dbt DAGs
+│   ├── dags/                     # IMDb, TMDb and dbt DAGs + tmdb_transform.py helpers
 │   ├── dbt_movie/                # dbt project: models, tests, snapshots
+│   ├── tests/                    # pytest unit tests for the TMDb transformation
 │   ├── config/  logs/  plugins/  # mounted into the Airflow containers
-└── docs/
-    └── flicks-and-figures-presentation.pptx   # final project presentation
+├── docs/
+│   └── flicks-and-figures-presentation.pptx   # final project presentation
+├── .github/workflows/tests.yml   # runs pytest on every push
+└── pytest.ini
 ```
 
 ## Run it locally
@@ -86,14 +91,25 @@ cinema-analytics-platform/
 
 5. **Run the DAGs** in order: `etl_imdb_current_year`, then `etl_tmdb_movies`, then `dbt_elt_process`.
 
+## Tests
+
+The TMDb transformation has unit tests that run without Airflow or Snowflake:
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+They check that zeros are kept, that missing and invalid values become `NULL`, that output is deterministic, that `NULL` is sent as a bound parameter rather than as text, and that only last-week releases are kept. GitHub Actions runs them on every push.
+
 ## My contributions
 
 I co-developed the Python ingestion DAGs, TMDb REST API extraction, MERGE-based incremental loads and the Dockerized Airflow setup, and developed the Snowflake SQL transformations for the genre, release-year and popularity models.
 
 ## Possible improvements
 
-- Load records in bulk (stage + `COPY INTO`, then one `MERGE`) instead of one `MERGE` per row, and use bound parameters instead of string-built SQL.
-- Store missing TMDb popularity and vote values as `NULL` rather than imputing random placeholder values in `transform_tmdb_data`.
+- Load records in bulk (stage + `COPY INTO`, then one `MERGE`) instead of one `MERGE` per row.
+- Move the IMDb DAG to bound parameters and unit-tested helpers, like the TMDb DAG.
 - Join IMDb and TMDb on a shared ID instead of exact title match.
 - Add tests on the staging model, such as `not_null` and `accepted_range` on popularity and vote count.
 

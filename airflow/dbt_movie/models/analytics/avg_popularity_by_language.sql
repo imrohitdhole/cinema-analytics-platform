@@ -13,4 +13,4 @@ SELECT
     avg_popularity,
     movie_count
 FROM language_popularity
-ORDER BY avg_popularity DESC
+ORDER BY avg_popularity DESC NULLS LAST  -- Snowflake sorts NULLs first in DESC by default
