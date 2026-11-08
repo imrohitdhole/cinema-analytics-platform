@@ -1,0 +1,28 @@
+# Airflow runtime output
+airflow/logs/*
+!airflow/logs/.gitkeep
+airflow/airflow.db
+airflow/webserver_config.py
+airflow/config/airflow.cfg
+
+# dbt build output
+airflow/dbt_movie/target/
+airflow/dbt_movie/dbt_packages/
+airflow/dbt_movie/logs/
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
